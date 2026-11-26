@@ -29,7 +29,8 @@ socket=$runtime/tailscaled.sock
 
 fail() {
 	echo "FAIL: $*" >&2
-	journalctl --no-pager -u "$unit" -n 80 >&2 || true
+	# Sign-in links are left out: anyone who opened one could add this machine to their tailnet.
+	journalctl --no-pager -u "$unit" -n 80 | sed 's|https://login\.tailscale\.com/[^ ]*|<sign-in link>|g' >&2 || true
 	exit 1
 }
 step() { echo "== $*"; }
@@ -48,7 +49,8 @@ network_snapshot() {
 	ip -6 rule
 	ip route show table all | grep -v '^\(local\|broadcast\|multicast\) ' | grep -v ' proto kernel ' || true
 	if command -v iptables-save >/dev/null; then iptables-save | grep -v '^#' | sed 's/\[[0-9:]*\]//'; fi
-	if command -v nft >/dev/null; then nft list ruleset 2>/dev/null | grep -v '^#' || true; fi
+	# Stateless: counters change with unrelated traffic.
+	if command -v nft >/dev/null; then nft --stateless list ruleset 2>/dev/null | grep -v '^#' || true; fi
 	sha256sum /etc/resolv.conf
 	readlink -f /etc/resolv.conf
 }
