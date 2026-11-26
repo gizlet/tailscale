@@ -1,0 +1,107 @@
+name: CI
+
+# Command-gated CI. Pull requests run it from a comment with a `/ci` line,
+# posted by gizlet-bot when the pull request is opened or updated, or by a
+# writer to run it again. Comment events run this file from the default
+# branch, so a pull request cannot rewrite its own required check. Do not add
+# a pull_request trigger. Pushes to main and version tags also release to the
+# Gizlet Store when gizlet.toml's version is new.
+
+on:
+  issue_comment:
+    types: [created]
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request to run for; leave empty to run on the selected ref.
+        required: false
+        default: ''
+        type: string
+      head_sha:
+        description: Expected pull-request head; a moved head is skipped.
+        required: false
+        default: ''
+        type: string
+
+permissions: {}
+
+jobs:
+  start:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.pull_request_number != '')
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request
+          && contains(github.event.comment.body, '/ci'))
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    uses: gizlet/.github/.github/workflows/pr-check-start.yml@latest
+    with:
+      check-name: CI
+      command: /ci
+      pull_request_number: ${{ inputs.pull_request_number }}
+      head_sha: ${{ inputs.head_sha }}
+
+  package:
+    name: Build, verify and smoke-test (ARM64)
+    needs: start
+    if: >-
+      !cancelled() && (
+        needs.start.outputs.run == 'true'
+        || (needs.start.result == 'skipped' && github.event_name != 'issue_comment'))
+    # A GitHub-hosted ARM64 VM: the smoke test runs the package natively under systemd.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    # The job runs pull-request code: read-only token and no secrets.
+    permissions:
+      contents: read
+    concurrency:
+      group: ci-${{ needs.start.outputs.number || github.run_id }}
+      cancel-in-progress: ${{ needs.start.outputs.number != '' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.start.outputs.head_sha || github.sha }}
+          persist-credentials: false
+      - name: Build the package
+        run: ./scripts/build.sh dist
+      - name: Rebuild from scratch and compare
+        run: ./scripts/build.sh --clean-cache "$RUNNER_TEMP/rebuild" && cmp dist/*.gzl "$RUNNER_TEMP"/rebuild/*.gzl
+      - name: Test and verify the package
+        run: ./scripts/test.sh dist/*.gzl
+      - name: Smoke-test the service under systemd
+        run: sudo ./scripts/smoke-test.sh dist/*.gzl
+      - run: sha256sum dist/*.gzl | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gizlet-packages
+          path: dist/*.gzl
+          if-no-files-found: error
+          overwrite: true
+
+  release:
+    needs: package
+    if: >-
+      !cancelled() && needs.package.result == 'success' && (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref_type == 'tag'))
+        || (github.event_name == 'workflow_dispatch' && github.ref_type == 'tag' && inputs.pull_request_number == ''))
+    permissions:
+      contents: write
+      id-token: write
+    uses: gizlet/.github/.github/workflows/store-release.yml@latest
+
+  finish:
+    if: always() && needs.start.outputs.run == 'true'
+    needs: [start, package]
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    uses: gizlet/.github/.github/workflows/pr-check-finish.yml@latest
+    with:
+      check_run_id: ${{ needs.start.outputs.check_run_id }}
+      comment_id: ${{ needs.start.outputs.comment_id }}
+      result: ${{ needs.package.result }}
