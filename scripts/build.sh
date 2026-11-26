@@ -30,7 +30,7 @@ if [ ! -d "$src/.git" ]; then
 	mv "$src.part" "$src"
 fi
 [ "$(git -C "$src" rev-parse HEAD)" = "$TAILSCALE_COMMIT" ] || die "Tailscale v$TAILSCALE_VERSION is not commit $TAILSCALE_COMMIT"
-[ -z "$(git -C "$src" status --porcelain --untracked-files=no)" ] || die "the Tailscale source in $src is modified"
+[ -z "$(git -C "$src" status --porcelain --untracked-files=all --ignored)" ] || die "the Tailscale source in $src is modified or has extra files; delete it to fetch it again"
 [ "$(cat "$src/VERSION.txt")" = "$TAILSCALE_VERSION" ] || die "Tailscale VERSION.txt is not $TAILSCALE_VERSION"
 
 stage=$(mktemp -d)
