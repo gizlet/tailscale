@@ -1,0 +1,28 @@
+id = "io.gizlet.tailscale"
+name = "Tailscale"
+version = "0.1.0"
+kind = "service"
+description = "Join your handheld to your own tailnet with the open-source Tailscale client, running in the background."
+tags = ["network", "vpn", "remote-access", "ssh"]
+color = "#3d3a8c"
+license = "BSD-3-Clause"
+runtime = 1
+icon = "store/icon.png"
+
+[names]
+zh-CN = "Tailscale"
+
+[descriptions]
+zh-CN = "用开源的 Tailscale 客户端在后台把掌机加入你自己的 tailnet。"
+
+[links]
+website = "https://github.com/gizlet/tailscale"
+
+[about]
+en = "store/about.en.md"
+zh-CN = "store/about.zh-CN.md"
+
+[[packages]]
+target = "aarch64-unknown-linux-gnu"
+tier = "lite"
+entry = "bin/tailscale-service"
