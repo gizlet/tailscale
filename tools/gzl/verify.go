@@ -159,6 +159,9 @@ func verify(specPath string, upstream Upstream, file string) error {
 		if setting(bi, "CGO_ENABLED") != "0" || setting(bi, "-trimpath") != "true" {
 			return fmt.Errorf("%s was not built with CGO_ENABLED=0 and -trimpath", name)
 		}
+		if fips := setting(bi, "GOFIPS140"); (fips != "" && fips != "off") || setting(bi, "GOEXPERIMENT") != "" {
+			return fmt.Errorf("%s was built with GOFIPS140=%q GOEXPERIMENT=%q; build with neither", name, fips, setting(bi, "GOEXPERIMENT"))
+		}
 	}
 
 	list, err := components(binaries)

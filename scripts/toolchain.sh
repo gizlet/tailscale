@@ -7,6 +7,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 . "$root/upstream.env"
 cache=${GIZLET_CACHE:-$root/.cache}
 mkdir -p "$cache"
+cache=$(cd "$cache" && pwd)
 
 die() {
 	echo "$(basename "$0"): $*" >&2
@@ -51,7 +52,7 @@ export GOCACHE="$cache/gocache"
 export GOENV=off
 export GOWORK=off
 export CGO_ENABLED=0
-unset GOOS GOARCH GOARM64 GOAMD64 GOEXPERIMENT GODEBUG GOPROXY GOSUMDB GONOSUMDB GOPRIVATE GOINSECURE 2>/dev/null || true
+unset GOOS GOARCH GOARM64 GOAMD64 GOEXPERIMENT GOFIPS140 GODEBUG GOPROXY GOSUMDB GONOSUMDB GOPRIVATE GOINSECURE 2>/dev/null || true
 [ "$(go env GOVERSION)" = "go$GO_VERSION" ] || die "expected go$GO_VERSION, found $(go env GOVERSION)"
 
 # gzl, this repository's package tool, built for the host.
