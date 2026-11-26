@@ -14,7 +14,6 @@ Tailscale 把你的设备连成一个私有网络（tailnet），无论它们在
 ssh root@gizlet-a1b2.local
 curl -fLo /tmp/tailscale.gzl https://dl.gizlet.io/github.com/gizlet/tailscale/v0.1.0/io.gizlet.tailscale-0.1.0-aarch64-unknown-linux-gnu-lite.gzl
 gizlet install /tmp/tailscale.gzl
-gizlet service start io.gizlet.tailscale
 /opt/gizlet/services/io.gizlet.tailscale/bin/tailscale up --qr
 ```
 

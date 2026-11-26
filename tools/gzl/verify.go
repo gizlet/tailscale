@@ -168,7 +168,7 @@ func verify(specPath string, upstream Upstream, file string) error {
 	for _, c := range list {
 		found := false
 		for name := range contents {
-			if strings.HasPrefix(name, c.Dir+"/") && !strings.Contains(strings.TrimPrefix(name, c.Dir+"/"), "/") && isLicenseFile(filepath.Base(name)) {
+			if strings.HasPrefix(name, c.Dir+"/") && isLicenseFile(filepath.Base(name)) {
 				found = true
 				break
 			}

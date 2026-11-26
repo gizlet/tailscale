@@ -21,7 +21,7 @@ curl -fLo /tmp/tailscale.gzl https://dl.gizlet.io/github.com/gizlet/tailscale/v0
 gizlet install /tmp/tailscale.gzl
 ```
 
-The package is also attached to each [GitHub release](https://github.com/gizlet/tailscale/releases); copy it over with `scp` and install it the same way. Installing a newer version replaces the package and keeps the sign-in.
+`gizlet install` starts the service and sets it to start at boot; it is ready to sign in once the command returns. The package is also attached to each [GitHub release](https://github.com/gizlet/tailscale/releases); copy it over with `scp` and install it the same way. Installing a newer version replaces the package, keeps the sign-in and the boot setting, and restarts the service if it was running.
 
 ## Starting and stopping
 
@@ -29,11 +29,11 @@ The package is also attached to each [GitHub release](https://github.com/gizlet/
 | --- | --- |
 | `gizlet service start io.gizlet.tailscale` | Starts it now |
 | `gizlet service stop io.gizlet.tailscale` | Stops it; the handheld goes offline in your tailnet |
-| `gizlet service enable io.gizlet.tailscale` | Starts it at every boot (`disable` undoes it) |
+| `gizlet service disable io.gizlet.tailscale` | Stops starting it at boot (`enable` turns that back on) |
 | `gizlet service status io.gizlet.tailscale` | Shows whether it runs |
 | `gizlet service logs io.gizlet.tailscale [-f]` | Shows tailscaled's log |
 
-The service runs in the background as a system unit: it keeps running while games and apps have the screen and while the launcher restarts. Wi-Fi drops while the handheld sleeps, so it shows as offline in the tailnet until it wakes and Wi-Fi reconnects.
+The launcher's **Settings → Services** page has the same **Running** and **Start at boot** switches. The service runs in the background as a system unit: it keeps running while games and apps have the screen and while the launcher restarts. Wi-Fi drops while the handheld sleeps, so it shows as offline in the tailnet until it wakes and Wi-Fi reconnects.
 
 ## Signing in
 

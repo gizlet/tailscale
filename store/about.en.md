@@ -14,7 +14,6 @@ Turn on Wi-Fi and SSH in **Settings**, then from your computer (with your handhe
 ssh root@gizlet-a1b2.local
 curl -fLo /tmp/tailscale.gzl https://dl.gizlet.io/github.com/gizlet/tailscale/v0.1.0/io.gizlet.tailscale-0.1.0-aarch64-unknown-linux-gnu-lite.gzl
 gizlet install /tmp/tailscale.gzl
-gizlet service start io.gizlet.tailscale
 /opt/gizlet/services/io.gizlet.tailscale/bin/tailscale up --qr
 ```
 

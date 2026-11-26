@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -41,16 +42,55 @@ func licenseDir(modulePath, version string) string {
 	if modulePath == "go" {
 		return "licenses/go"
 	}
-	clean := strings.Map(func(r rune) rune {
-		if r < unicode.MaxASCII && (r == '/' || r == '.' || r == '-' || r == '_' || r == '+' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
-			return r
-		}
-		return '_'
-	}, modulePath)
+	clean := portablePath(modulePath)
 	if version == "" || version == "(devel)" {
 		return "licenses/" + clean
 	}
 	return "licenses/modules/" + clean + "/" + version
+}
+
+// portablePath replaces anything but letters, digits, "/" and "._+-" with "_".
+func portablePath(p string) string {
+	return strings.Map(func(r rune) rune {
+		if r < unicode.MaxASCII && (r == '/' || r == '.' || r == '-' || r == '_' || r == '+' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return r
+		}
+		return '_'
+	}, p)
+}
+
+// moduleLicenseFiles lists the license files of the module in dir, at any depth, as
+// slash-separated paths relative to dir: code bundled inside a module can carry its
+// own terms. Folders the go command never builds from are skipped: testdata, vendor
+// and those starting with "." or "_". The Go toolchain's own entry is its root
+// LICENSE and PATENTS, which cover the whole standard library.
+func moduleLicenseFiles(dir string, rootOnly bool) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p == dir {
+				return nil
+			}
+			name := d.Name()
+			if rootOnly || name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type().IsRegular() && isLicenseFile(d.Name()) {
+			rel, err := filepath.Rel(dir, p)
+			if err != nil {
+				return err
+			}
+			files = append(files, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	sort.Strings(files)
+	return files, err
 }
 
 // components lists what the binaries link, from their Go build information.
@@ -162,27 +202,25 @@ func collectLicenses(stage string, binaries map[string]*debug.BuildInfo, sources
 		if err != nil {
 			return nil, err
 		}
-		entries, err := os.ReadDir(dir)
+		files, err := moduleLicenseFiles(dir, c.Path == "go")
 		if err != nil {
 			return nil, fmt.Errorf("%s@%s: %w", c.Path, c.Version, err)
 		}
 		var texts [][]byte
-		for _, entry := range entries {
-			if !entry.Type().IsRegular() || !isLicenseFile(entry.Name()) {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		for _, rel := range files {
+			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 			if err != nil {
 				return nil, err
 			}
-			dest := filepath.Join(stage, filepath.FromSlash(c.Dir), entry.Name())
+			name := path.Join(c.Dir, portablePath(rel))
+			dest := filepath.Join(stage, filepath.FromSlash(name))
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 				return nil, err
 			}
 			if err := os.WriteFile(dest, data, 0o644); err != nil {
 				return nil, err
 			}
-			c.Files = append(c.Files, path.Join(c.Dir, entry.Name()))
+			c.Files = append(c.Files, name)
 			texts = append(texts, data)
 		}
 		if len(c.Files) == 0 {

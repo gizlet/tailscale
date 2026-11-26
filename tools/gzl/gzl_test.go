@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -213,5 +214,72 @@ func TestLicenseNames(t *testing.T) {
 	}
 	if got := licenseDir("gopkg.in/yaml.v3", "v3.0.1"); got != "licenses/modules/gopkg.in/yaml.v3/v3.0.1" {
 		t.Errorf("licenseDir = %s", got)
+	}
+}
+
+const (
+	mitText = "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
+	bsdText = "Redistribution and use in source and binary forms, with or without modification.\nNeither the name of the copyright holder nor the names\n"
+)
+
+func TestCollectLicensesIncludesBundledCode(t *testing.T) {
+	root := t.TempDir()
+	goroot := filepath.Join(root, "go")
+	writeFile(t, filepath.Join(goroot, "VERSION"), []byte("go1.27.4\ntime 2026-11-01\n"), 0o644)
+	writeFile(t, filepath.Join(goroot, "LICENSE"), []byte(bsdText), 0o644)
+	writeFile(t, filepath.Join(goroot, "src/vendor/golang.org/x/net/LICENSE"), []byte("not collected"), 0o644)
+	main := filepath.Join(root, "main")
+	writeFile(t, filepath.Join(main, "LICENSE"), []byte(bsdText), 0o644)
+	writeFile(t, filepath.Join(main, ".cache/dep/LICENSE"), []byte("not collected"), 0o644)
+	modcache := filepath.Join(root, "mod")
+	dep := filepath.Join(modcache, "example.com/!upper/dep@v1.2.3")
+	writeFile(t, filepath.Join(dep, "LICENSE"), []byte(bsdText), 0o644)
+	writeFile(t, filepath.Join(dep, "zstd/internal/xxhash/LICENSE.txt"), []byte(mitText), 0o644)
+	writeFile(t, filepath.Join(dep, "zstd/internal/xxhash/xxhash.go"), []byte("package xxhash"), 0o644)
+	writeFile(t, filepath.Join(dep, "testdata/LICENSE"), []byte("not collected"), 0o644)
+	writeFile(t, filepath.Join(dep, "_examples/LICENSE"), []byte("not collected"), 0o644)
+	writeFile(t, filepath.Join(dep, "vendor/x/LICENSE"), []byte("not collected"), 0o644)
+
+	bi := &debug.BuildInfo{
+		GoVersion: "go1.27.4",
+		Main:      debug.Module{Path: "example.com/main", Version: "(devel)"},
+		Deps:      []*debug.Module{{Path: "example.com/Upper/dep", Version: "v1.2.3"}},
+	}
+	stage := filepath.Join(root, "stage")
+	list, err := collectLicenses(stage, map[string]*debug.BuildInfo{"prog": bi}, licenseSources{
+		goroot: goroot, modcache: modcache, modules: map[string]string{"example.com/main": main},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	for _, c := range list {
+		files = append(files, c.Files...)
+	}
+	want := []string{
+		"licenses/go/LICENSE",
+		"licenses/modules/example.com/Upper/dep/v1.2.3/LICENSE",
+		"licenses/modules/example.com/Upper/dep/v1.2.3/zstd/internal/xxhash/LICENSE.txt",
+		"licenses/example.com/main/LICENSE",
+	}
+	if strings.Join(files, "\n") != strings.Join(want, "\n") {
+		t.Errorf("collected\n%s\nwant\n%s", strings.Join(files, "\n"), strings.Join(want, "\n"))
+	}
+	if got := list[1].License; got != "MIT, BSD-3-Clause" {
+		t.Errorf("dep terms = %q", got)
+	}
+	nested, err := os.ReadFile(filepath.Join(stage, "licenses/modules/example.com/Upper/dep/v1.2.3/zstd/internal/xxhash/LICENSE.txt"))
+	if err != nil || string(nested) != mitText {
+		t.Errorf("nested license = %q, %v", nested, err)
+	}
+	if _, err := os.Stat(filepath.Join(stage, "licenses/README.md")); err != nil {
+		t.Error(err)
+	}
+
+	writeFile(t, filepath.Join(dep, "zstd/internal/xxhash/LICENSE.txt"), []byte("GNU General Public License"), 0o644)
+	if _, err := collectLicenses(filepath.Join(root, "stage2"), map[string]*debug.BuildInfo{"prog": bi}, licenseSources{
+		goroot: goroot, modcache: modcache, modules: map[string]string{"example.com/main": main},
+	}); err == nil {
+		t.Error("bundled code under unreviewed terms was accepted")
 	}
 }
